@@ -1,0 +1,53 @@
+---
+- name: Deploy Tomcat 9 to 10 servers
+  hosts: all
+  become: true
+
+  vars:
+    tomcat_version: 9.0.56
+    tomcat_install_dir: /opt/tomcat
+    tomcat_service_name: tomcat
+
+  tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Java
+      apt:
+        name: default-jdk
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Tomcat
+      unarchive:
+        src: "https://downloads.apache.org/tomcat/tomcat-{{ tomcat_version.split('.')[0] }}/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
+        dest: "{{ tomcat_install_dir }}"
+        remote_src: yes
+        copy: no
+      notify: Restart Tomcat
+
+    - name: Configure Tomcat users
+      template:
+        src: tomcat-users.xml.j2
+        dest: "{{ tomcat_install_dir }}/conf/tomcat-users.xml"
+      notify: Restart Tomcat
+
+    - name: Create Tomcat service
+      template:
+        src: tomcat.service.j2
+        dest: "/etc/systemd/system/{{ tomcat_service_name }}.service"
+      notify: Restart Tomcat
+
+    - name: Enable and start Tomcat service
+      systemd:
+        name: "{{ tomcat_service_name }}"
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Restart Tomcat
+      systemd:
+        name: "{{ tomcat_service_name }}"
+        state: restarted
